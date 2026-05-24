@@ -3,8 +3,6 @@
 from flask import make_response, jsonify, request, session
 from flask_restful import Resource
 from sqlalchemy.exc import IntegrityError
-
-# FIX: Import pre-configured items directly from the lab's config layout
 from config import app, db, api
 from models import User, Recipe
 
@@ -15,17 +13,14 @@ class Signup(Resource):
         password = data.get('password')
         
         if not username or not password:
-            return make_response(jsonify({'error': 'Unprocessable Entity: Missing required fields'}), 422)
+            return make_response(jsonify({'error': 'Missing required fields'}), 422)
             
         try:
-            # Build the new user record matching parameters
             new_user = User(
                 username=username,
                 bio=data.get('bio'),
                 image_url=data.get('image_url')
             )
-            
-            # This triggers the @password.setter defined inside your models.py
             new_user.password = password
                 
             db.session.add(new_user)
@@ -47,12 +42,11 @@ class Login(Resource):
         
         user = User.query.filter_by(username=username).first()
         
-        # Uses your model's native hybrid method to authenticate the hash
         if user and user.authenticate(password):
             session['user_id'] = user.id
             return make_response(jsonify(user.to_dict()), 200)
             
-        return make_response(jsonify({'error': 'Unauthorized access credentials'}), 401)
+        return make_response(jsonify({'error': 'Unauthorized'}), 401)
 
 
 class Logout(Resource):
@@ -67,20 +61,31 @@ class Logout(Resource):
 class CheckSession(Resource):
     def get(self):
         user_id = session.get('user_id')
-        
         if user_id:
             user = User.query.filter_by(id=user_id).first()
             if user:
                 return make_response(jsonify(user.to_dict()), 200)
-                
         return make_response(jsonify({'error': 'Unauthorized'}), 401)
 
 
-# Register endpoints using the imported api manager instance
+# FIX: Added missing recipe index tracker endpoint requested by the automated test
+class RecipeIndex(Resource):
+    def get(self):
+        user_id = session.get('user_id')
+        if not user_id:
+            return make_response(jsonify({'error': 'Unauthorized'}), 401)
+            
+        recipes = Recipe.query.filter_by(user_id=user_id).all()
+        return make_response(jsonify([r.to_dict() for r in recipes]), 200)
+
+
+# CRITICAL: Verify these are passed exactly as raw uninstantiated class references
 api.add_resource(Signup, '/signup')
 api.add_resource(Login, '/login')
 api.add_resource(Logout, '/logout')
 api.add_resource(CheckSession, '/check_session')
+api.add_resource(RecipeIndex, '/recipes')
 
 if __name__ == '__main__':
     app.run(port=5555, debug=True)
+
